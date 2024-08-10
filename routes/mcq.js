@@ -1,4 +1,5 @@
 const express=require('express')
+const router = express.Router(); // Create router instance
 const auth=require('../middleware/authMiddleware')
 const MCQ=require('../models/MCQ')
 
@@ -69,7 +70,7 @@ router.delete('/:id',auth,async(req,res)=>{
 
         if(mcq.createdBy.toString()!==req.user.id)
             return res.status(401).json({msg:'Not authorized'})
-        await MCQ.findByIdAndRemove(req.params.id);
+        await MCQ.findByIdAndDelete(req.params.id);
         res.json({msg:'MCQ removed'})
     }
     catch(err){
