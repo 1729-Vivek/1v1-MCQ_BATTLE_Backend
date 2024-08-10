@@ -5,23 +5,29 @@ const MCQ=require('../models/MCQ')
 
 //Create MCQ
 
-router.post('/',auth,async (req,res)=>{
-    const {body ,explanation,options,difficulty}=req.body;
-    try{
-        const mcq=new MCQ({
+router.post('/', auth, async (req, res) => {
+    const { body, explanation, options, difficulty } = req.body;
+    try {
+        if (!body || !options || !difficulty) {
+            return res.status(400).json({ msg: 'Missing required fields' });
+        }
+
+        const mcq = new MCQ({
             body,
             explanation,
             options,
             difficulty,
-            createdBy:req.user.id,
-        })
+            createdBy: req.user.id,
+        });
+
         await mcq.save();
         res.json(mcq);
+    } catch (err) {
+        console.error(err.message);  // Log the error message
+        res.status(500).json({ msg: 'Server error', error: err.message });  // Send more details in the response
     }
-    catch(err){
-        res.status(500).send('Server error')
-    }
-})
+});
+
 
 //Read MCQs
 router.get('/',async(req,res)=>{
@@ -33,7 +39,18 @@ router.get('/',async(req,res)=>{
         res.status(500).send('Server error')
     }
 })
-
+// Backend route for fetching an MCQ by ID
+router.get('/:id', async (req, res) => {
+    try {
+      const mcq = await MCQ.findById(req.params.id);
+      if (!mcq) return res.status(404).json({ msg: 'MCQ not found' });
+      res.json(mcq);
+    } catch (err) {
+      console.error(err.message); // Log the error
+      res.status(500).send('Server error');
+    }
+  });
+  
 //Update MCQ
 
 router.put('/:id',auth,async(req,res)=>{
