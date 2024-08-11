@@ -1,127 +1,118 @@
 const express = require('express');
 const auth = require('../middleware/authMiddleware');
 const Game = require('../models/Game');
-const MCQ = require('../models/MCQ'); // Assuming you have an MCQ model
-const Pusher = require('pusher');
-
-// Initialize Pusher
-const pusher = new Pusher({
-  appId: "1834030",
-  key: "d29bf340b0ce1bfc0bc9",
-  secret: "e3d076b9d32b0e4a2c0f",
-  cluster: "ap2",
-  useTLS: true,
-});
-
+const MCQ = require('../models/MCQ');
 const router = express.Router();
 
-// Create game
+// Create a new game
 router.post('/', auth, async (req, res) => {
   try {
-    const game = new Game({
+    const newGame = new Game({
       owner: req.user.id,
-      mcqs: [], // Add MCQs if needed
+      status: 'waiting',
     });
-
-    await game.save();
-
-    // Trigger a Pusher event after the game is created
-    pusher.trigger('lobby', 'game-created', {
-      gameId: game._id,
-      owner: game.owner,
-      status: game.status
-    });
-
-    res.json(game);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    await newGame.save();
+    res.status(201).json(newGame);
+  } catch (error) {
+    console.error('Error creating game:', error);
+    res.status(500).send('Server error');
   }
 });
 
-// List games
-router.get('/', async (req, res) => {
-  try {
-    const games = await Game.find({ status: 'waiting' });
-    res.json(games);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
-});
-
-// Join game
+// Join a game
 router.post('/:gameId/join', auth, async (req, res) => {
   try {
     const game = await Game.findById(req.params.gameId);
     if (!game) return res.status(404).send('Game not found');
-
-    if (game.participants.includes(req.user.id)) {
-      return res.status(400).send('You are already in this game');
-    }
+    if (game.status !== 'waiting') return res.status(400).send('Game is not in waiting state');
+    if (game.participants.includes(req.user.id)) return res.status(400).send('Already joined');
 
     game.participants.push(req.user.id);
-
-    if (game.participants.length >= 2) {
-      game.status = 'active';
-    }
-
+    if (game.participants.length > 1) game.status = 'active';
     await game.save();
 
-    // Trigger a Pusher event when a user joins the game
-    pusher.trigger('lobby', 'game-updated', {
-      gameId: game._id,
-      status: game.status
-    });
-
     res.json(game);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+  } catch (error) {
+    console.error('Error joining game:', error);
+    res.status(500).send('Server error');
   }
 });
 
-// Get game details
-router.get('/:gameId', auth, async (req, res) => {
+// Get all games
+router.get('/', async (req, res) => {
   try {
-    const game = await Game.findById(req.params.gameId).populate('mcqs');
-    if (!game) return res.status(404).send('Game not found');
-    res.json(game);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    const games = await Game.find();
+    res.json(games);
+  } catch (error) {
+    console.error('Error fetching games:', error);
+    res.status(500).send('Server error');
   }
 });
 
-// Submit answer
+// Get details of a specific game, including MCQs
+// Add MCQs to a game
+// Add MCQs to a game
+router.post('/:gameId/add-mcqs', auth, async (req, res) => {
+    try {
+      const { mcqIds } = req.body; // Array of MCQ IDs
+      if (!mcqIds || !Array.isArray(mcqIds)) return res.status(400).send('Invalid MCQ IDs');
+  
+      const game = await Game.findById(req.params.gameId);
+      if (!game) return res.status(404).send('Game not found');
+      if (game.owner.toString() !== req.user.id) return res.status(403).send('Not authorized');
+  
+      // Ensure MCQ IDs are valid
+      const validMcqs = await MCQ.find({ '_id': { $in: mcqIds } });
+      if (validMcqs.length !== mcqIds.length) return res.status(400).send('One or more MCQ IDs are invalid');
+  
+      // Add each MCQ ID to the game
+      mcqIds.forEach(mcqId => {
+        if (!game.mcqs.includes(mcqId)) {
+          game.mcqs.push(mcqId);
+        }
+      });
+  
+      await game.save();
+      console.log('MCQs added to game:', game.mcqs); // Debugging log
+      res.json(game);
+    } catch (error) {
+      console.error('Error adding MCQs:', error);
+      res.status(500).send('Server error');
+    }
+  });
+  
+  // Get details of a specific game, including MCQs
+  router.get('/:gameId', async (req, res) => {
+    try {
+      const game = await Game.findById(req.params.gameId).populate('mcqs');
+      console.log('Fetched game details:', game); // Debugging log
+      if (!game) return res.status(404).send('Game not found');
+      res.json(game);
+    } catch (error) {
+      console.error('Error fetching game details:', error);
+      res.status(500).send('Server error');
+    }
+  });
+  
+  
+
+// Submit an answer for a game
 router.post('/:gameId/answer', auth, async (req, res) => {
   try {
-    const { mcqId, answer } = req.body;
-    const game = await Game.findById(req.params.gameId).populate('mcqs');
-
+    const game = await Game.findById(req.params.gameId);
     if (!game) return res.status(404).send('Game not found');
 
-    const mcq = game.mcqs.find(mcq => mcq._id.toString() === mcqId);
+    const mcq = await MCQ.findById(req.body.mcqId);
     if (!mcq) return res.status(404).send('MCQ not found');
 
-    const correct = mcq.correctOption === answer;
+    const isCorrect = mcq.options.some(option => option.body === req.body.answer && option.is_correct);
 
-    if (correct) {
-      // Update the user's score
-      const scoreEntry = game.scores.find(score => score.user.toString() === req.user.id);
-      if (scoreEntry) {
-        scoreEntry.score += 1;
-      } else {
-        game.scores.push({ user: req.user.id, score: 1 });
-      }
-    }
+    // Logic to update scores here (if needed)
 
-    await game.save();
-
-    res.json({ correct });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    res.json({ correct: isCorrect });
+  } catch (error) {
+    console.error('Error submitting answer:', error);
+    res.status(500).send('Server error');
   }
 });
 

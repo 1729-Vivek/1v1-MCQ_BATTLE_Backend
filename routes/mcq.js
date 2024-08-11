@@ -41,16 +41,16 @@ router.get('/',async(req,res)=>{
 })
 // Backend route for fetching an MCQ by ID
 router.get('/:id', async (req, res) => {
-    try {
-      const mcq = await MCQ.findById(req.params.id);
-      if (!mcq) return res.status(404).json({ msg: 'MCQ not found' });
-      res.json(mcq);
-    } catch (err) {
-      console.error(err.message); // Log the error
-      res.status(500).send('Server error');
-    }
-  });
-  
+  try {
+    const mcq = await MCQ.findById(req.params.id);
+    if (!mcq) return res.status(404).json({ msg: 'MCQ not found' });
+    res.json(mcq);
+  } catch (err) {
+    console.error(err.message); // Log the error
+    res.status(500).send('Server error');
+  }
+});
+
 //Update MCQ
 
 router.put('/:id',auth,async(req,res)=>{
