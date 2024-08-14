@@ -132,27 +132,54 @@ router.post('/:gameId/start',auth,async(req,res)=>{
     res.status(500).send('Server Error')
   }
 })
+// Backend: End Game Route
 router.post('/:gameId/end', auth, async (req, res) => {
-  console.log("Yaha tak aaya ki")
-  console.log('End game route hit'); // Add this for debugging
+  console.log("HELLO HELLO ")
   try {
-    const game = await Game.findById(req.params.gameId);
-    if (!game) return res.status(404).send('Game not found');
+    console.log('Attempting to find game');
+    const game = await Game.findById(req.params.gameId)
+      .populate('scores.userId', 'username'); // Populate the user details
+
+    if (!game) {
+      console.log('Game not found');
+      return res.status(404).send('Game not found');
+    }
+
+    console.log('Game found:', game);
     
     game.status = 'completed';
     game.endTime = new Date();
     await game.save();
 
+    console.log('Game status updated and saved');
+    
+    // Calculate results
     const results = game.scores.map(score => ({
-      userId: score.userId,
+      user: score.userId.username, // Use the username instead of userId
       score: score.score
     }));
-    console.log(results)
-    res.json(results);
+
+    console.log('Results:', results); // This should print your results
+
+    // Determine winner and score difference
+    const winner = results.reduce((max, result) => result.score > max.score ? result : max, results[0]);
+    const loser = results.find(result => result.user !== winner.user);
+
+    const scoreDifference = winner.score - (loser ? loser.score : 0);
+
+    res.json({
+      results,
+      winner,
+      loser,
+      scoreDifference
+    });
   } catch (error) {
     console.error('Error ending game:', error);
     res.status(500).send('Server Error');
   }
 });
+
+
+
 
 module.exports = router;
