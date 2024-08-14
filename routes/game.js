@@ -53,38 +53,29 @@ router.get('/', async (req, res) => {
 // Add MCQs to a game
 // Add MCQs to a game
 router.post('/:gameId/add-mcqs', auth, async (req, res) => {
-    try {
-      const { mcqIds } = req.body; // Array of MCQ IDs
-      if (!mcqIds || !Array.isArray(mcqIds)) return res.status(400).send('Invalid MCQ IDs');
-  
-      const game = await Game.findById(req.params.gameId);
-      if (!game) return res.status(404).send('Game not found');
-      if (game.owner.toString() !== req.user.id) return res.status(403).send('Not authorized');
-  
-      // Ensure MCQ IDs are valid
-      const validMcqs = await MCQ.find({ '_id': { $in: mcqIds } });
-      if (validMcqs.length !== mcqIds.length) return res.status(400).send('One or more MCQ IDs are invalid');
-  
-      // Add each MCQ ID to the game
-      mcqIds.forEach(mcqId => {
-        if (!game.mcqs.includes(mcqId)) {
-          game.mcqs.push(mcqId);
-        }
-      });
-  
+  try {
+    const { mcqIds } = req.body;
+    const game = await Game.findById(req.params.gameId);
+
+    // Filter out MCQs that are already present
+    const newMcqIds = mcqIds.filter((id) => !game.mcqs.includes(id));
+
+    if (newMcqIds.length > 0) {
+      game.mcqs.push(...newMcqIds);
       await game.save();
-      console.log('MCQs added to game:', game.mcqs); // Debugging log
-      res.json(game);
-    } catch (error) {
-      console.error('Error adding MCQs:', error);
-      res.status(500).send('Server error');
     }
-  });
-  
+
+    res.status(200).json(game);
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred while adding MCQs' });
+  }
+});
+
   // Get details of a specific game, including MCQs
   router.get('/:gameId', async (req, res) => {
     try {
       const game = await Game.findById(req.params.gameId).populate('mcqs');
+      console.log("HELLO MCQS")
       console.log('Fetched game details:', game); // Debugging log
       if (!game) return res.status(404).send('Game not found');
       res.json(game);
