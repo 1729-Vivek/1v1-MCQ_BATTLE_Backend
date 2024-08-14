@@ -98,12 +98,60 @@ router.post('/:gameId/answer', auth, async (req, res) => {
 
     const isCorrect = mcq.options.some(option => option.body === req.body.answer && option.is_correct);
 
+
     // Logic to update scores here (if needed)
+    if (isCorrect) {
+      const userScore = game.scores.find(score => score.userId.toString() === req.user.id);
+      if (userScore) {
+        userScore.score += 1;
+      } else {
+        game.scores.push({ userId: req.user.id, score: 1 });
+      }
+      await game.save();
+    }
 
     res.json({ correct: isCorrect });
   } catch (error) {
     console.error('Error submitting answer:', error);
     res.status(500).send('Server error');
+  }
+});
+router.post('/:gameId/start',auth,async(req,res)=>{
+  try{
+    const game=await Game.findById(req.params.gameId);
+    if(!game) return res.status(404).send('Game not found');
+
+    game.status='active';
+    game.startTime=new Date();
+    await game.save();
+    res.json(game);
+
+  }
+  catch(error){
+    console.error('Error starting game:',error);
+    res.status(500).send('Server Error')
+  }
+})
+router.post('/:gameId/end', auth, async (req, res) => {
+  console.log("Yaha tak aaya ki")
+  console.log('End game route hit'); // Add this for debugging
+  try {
+    const game = await Game.findById(req.params.gameId);
+    if (!game) return res.status(404).send('Game not found');
+    
+    game.status = 'completed';
+    game.endTime = new Date();
+    await game.save();
+
+    const results = game.scores.map(score => ({
+      userId: score.userId,
+      score: score.score
+    }));
+    console.log(results)
+    res.json(results);
+  } catch (error) {
+    console.error('Error ending game:', error);
+    res.status(500).send('Server Error');
   }
 });
 
