@@ -88,6 +88,7 @@ router.post('/:gameId/add-mcqs', auth, async (req, res) => {
   
 
 // Submit an answer for a game
+// routes/game.js
 router.post('/:gameId/answer', auth, async (req, res) => {
   try {
     const game = await Game.findById(req.params.gameId);
@@ -98,24 +99,26 @@ router.post('/:gameId/answer', auth, async (req, res) => {
 
     const isCorrect = mcq.options.some(option => option.body === req.body.answer && option.is_correct);
 
-
-    // Logic to update scores here (if needed)
-    if (isCorrect) {
-      const userScore = game.scores.find(score => score.userId.toString() === req.user.id);
-      if (userScore) {
+    // Update score
+    let userScore = game.scores.find(score => score.userId.toString() === req.user.id);
+    if (userScore) {
+      if (isCorrect) {
         userScore.score += 1;
-      } else {
-        game.scores.push({ userId: req.user.id, score: 1 });
       }
-      await game.save();
+      userScore.hasSubmitted = true;
+    } else {
+      game.scores.push({ userId: req.user.id, score: isCorrect ? 1 : 0, hasSubmitted: true });
     }
 
+    await game.save();
     res.json({ correct: isCorrect });
   } catch (error) {
     console.error('Error submitting answer:', error);
     res.status(500).send('Server error');
   }
 });
+
+
 router.post('/:gameId/start',auth,async(req,res)=>{
   try{
     const game=await Game.findById(req.params.gameId);
@@ -133,12 +136,19 @@ router.post('/:gameId/start',auth,async(req,res)=>{
   }
 })
 // Backend: End Game Route
+// routes/game.js
 router.post('/:gameId/end', auth, async (req, res) => {
   try {
-    const game = await Game.findById(req.params.gameId)
-      .populate('scores.userId', 'username'); // Populate the user details
+    const game = await Game.findById(req.params.gameId).populate('scores.userId', 'username');
 
     if (!game) return res.status(404).send('Game not found');
+
+    // Check if both participants have submitted
+    const allSubmitted = game.scores.every(score => score.hasSubmitted);
+
+    if (!allSubmitted) {
+      return res.status(400).send('Not all participants have submitted their answers');
+    }
 
     game.status = 'completed';
     game.endTime = new Date();
@@ -149,20 +159,9 @@ router.post('/:gameId/end', auth, async (req, res) => {
       score: score.score
     }));
 
-    // Compare scores
-    let winner, loser;
-    if (results[0].score > results[1].score) {
-      winner = results[0];
-      loser = results[1];
-    } else if (results[1].score > results[0].score) {
-      winner = results[1];
-      loser = results[0];
-    } else {
-      winner = null; // It's a tie
-      loser = null;
-    }
-
-    const scoreDifference = Math.abs(results[0].score - results[1].score);
+    const winner = results.reduce((max, result) => result.score > max.score ? result : max, results[0]);
+    const loser = results.find(result => result.user !== winner.user);
+    const scoreDifference = winner.score - (loser ? loser.score : 0);
 
     res.json({
       results,
