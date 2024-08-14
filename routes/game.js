@@ -134,38 +134,35 @@ router.post('/:gameId/start',auth,async(req,res)=>{
 })
 // Backend: End Game Route
 router.post('/:gameId/end', auth, async (req, res) => {
-  console.log("HELLO HELLO ")
   try {
-    console.log('Attempting to find game');
     const game = await Game.findById(req.params.gameId)
       .populate('scores.userId', 'username'); // Populate the user details
 
-    if (!game) {
-      console.log('Game not found');
-      return res.status(404).send('Game not found');
-    }
+    if (!game) return res.status(404).send('Game not found');
 
-    console.log('Game found:', game);
-    
     game.status = 'completed';
     game.endTime = new Date();
     await game.save();
 
-    console.log('Game status updated and saved');
-    
-    // Calculate results
     const results = game.scores.map(score => ({
-      user: score.userId.username, // Use the username instead of userId
+      user: score.userId.username,
       score: score.score
     }));
 
-    console.log('Results:', results); // This should print your results
+    // Compare scores
+    let winner, loser;
+    if (results[0].score > results[1].score) {
+      winner = results[0];
+      loser = results[1];
+    } else if (results[1].score > results[0].score) {
+      winner = results[1];
+      loser = results[0];
+    } else {
+      winner = null; // It's a tie
+      loser = null;
+    }
 
-    // Determine winner and score difference
-    const winner = results.reduce((max, result) => result.score > max.score ? result : max, results[0]);
-    const loser = results.find(result => result.user !== winner.user);
-
-    const scoreDifference = winner.score - (loser ? loser.score : 0);
+    const scoreDifference = Math.abs(results[0].score - results[1].score);
 
     res.json({
       results,
@@ -178,7 +175,6 @@ router.post('/:gameId/end', auth, async (req, res) => {
     res.status(500).send('Server Error');
   }
 });
-
 
 
 
