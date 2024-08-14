@@ -71,7 +71,7 @@ This is the backend service for the MCQ and game application, built with Express
 Feel free to open issues or submit pull requests for improvements.
 
 
-##Importants points for interview
+## Importants points for interview
 # Quiz Game Backend
 
 ## Technology Stack
